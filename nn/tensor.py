@@ -41,8 +41,7 @@ class Tensor:
     def __len__(self):
         return len(self.data)
 
-    # ---- Arithmetic ----
-
+    # same as micrograd but works on arrays instead of scalars, handles broadcasting automatically
     def __add__(self, other):
         other = other if isinstance(other, Tensor) else Tensor(other)
         out = Tensor(
@@ -134,8 +133,8 @@ class Tensor:
         out._backward = _backward
         return out
 
-    # ---- Matrix ops ----
-
+    # matrix operations 
+    # each linear layer = matmul (ie, GRU, encoder, decoder, actor, critic)
     def matmul(self, other):
         other = other if isinstance(other, Tensor) else Tensor(other)
         out = Tensor(
@@ -159,7 +158,7 @@ class Tensor:
     def __matmul__(self, other):
         return self.matmul(other)
 
-    def transpose(self, *axes):
+    def transpose(self, *axes): # reverses axes order 
         if not axes:
             out_data = self.data.T
             inv_axes = None
@@ -178,9 +177,8 @@ class Tensor:
         out._backward = _backward
         return out
 
-    # ---- Activations ----
-
-    def relu(self):
+    # activations 
+    def relu(self): # max(0, x) - only positive values are passed through 
         out = Tensor(np.maximum(0, self.data), requires_grad=self.requires_grad, _children=(self,), _op='relu')
 
         def _backward():
@@ -191,7 +189,7 @@ class Tensor:
         out._backward = _backward
         return out
 
-    def silu(self):
+    def silu(self): # x * sigmoid(x) - dreamerV3 uses this in MLPs
         s = 1.0 / (1.0 + np.exp(-np.clip(self.data, -500, 500)))
         out = Tensor(self.data * s, requires_grad=self.requires_grad, _children=(self,), _op='silu')
 
@@ -203,7 +201,7 @@ class Tensor:
         out._backward = _backward
         return out
 
-    def sigmoid(self):
+    def sigmoid(self):  # 1/(1+e^-x) - used in GRU gates
         s = 1.0 / (1.0 + np.exp(-np.clip(self.data, -500, 500)))
         out = Tensor(s, requires_grad=self.requires_grad, _children=(self,), _op='sigmoid')
 
@@ -215,7 +213,7 @@ class Tensor:
         out._backward = _backward
         return out
 
-    def tanh(self):
+    def tanh(self): # 1 - tanh^2 - GRU hidden states 
         t = np.tanh(self.data)
         out = Tensor(t, requires_grad=self.requires_grad, _children=(self,), _op='tanh')
 
@@ -227,9 +225,8 @@ class Tensor:
         out._backward = _backward
         return out
 
-    # ---- Reductions ----
-
-    def sum(self, axis=None, keepdims=False):
+    # reductions 
+    def sum(self, axis=None, keepdims=False): # copies gradient to every element which is summed
         out = Tensor(
             self.data.sum(axis=axis, keepdims=keepdims),
             requires_grad=self.requires_grad, _children=(self,), _op='sum',
@@ -246,6 +243,7 @@ class Tensor:
         out._backward = _backward
         return out
 
+    # compute per element losses, then mean() them into single scalar to call .backward() on
     def mean(self, axis=None, keepdims=False):
         n = np.prod([self.shape[a] for a in (range(self.ndim) if axis is None else (axis if isinstance(axis, tuple) else (axis,)))])
         out = Tensor(
@@ -282,8 +280,7 @@ class Tensor:
         out._backward = _backward
         return out
 
-    # ---- Element-wise math ----
-
+    # element math 
     def exp(self):
         e = np.exp(np.clip(self.data, -500, 500))
         out = Tensor(e, requires_grad=self.requires_grad, _children=(self,), _op='exp')
@@ -338,8 +335,7 @@ class Tensor:
         out._backward = _backward
         return out
 
-    # ---- Shape ops ----
-
+    # shape ops 
     def reshape(self, *shape):
         out = Tensor(self.data.reshape(*shape), requires_grad=self.requires_grad, _children=(self,), _op='reshape')
 
@@ -355,10 +351,10 @@ class Tensor:
         new_shape = self.shape[:start_dim] + (-1,)
         return self.reshape(*new_shape)
 
-    # ---- Probabilistic / DreamerV3-specific ----
+    # DreamerV3-specific 
 
-    def softmax(self, axis=-1):
-        shifted = self.data - self.data.max(axis=axis, keepdims=True)
+    def softmax(self, axis=-1): # raw bits into probabilities which sum to 1
+        shifted = self.data - self.data.max(axis=axis, keepdims=True) # prevents overflow
         e = np.exp(shifted)
         s = e / e.sum(axis=axis, keepdims=True)
         out = Tensor(s, requires_grad=self.requires_grad, _children=(self,), _op='softmax')
@@ -387,7 +383,6 @@ class Tensor:
         return out
 
     def straight_through(self, hard):
-        """Forward uses hard values, backward passes gradient to self (the soft logits)."""
         hard_data = hard.data if isinstance(hard, Tensor) else hard
         out = Tensor(hard_data, requires_grad=self.requires_grad, _children=(self,), _op='ST')
 
@@ -426,7 +421,7 @@ class Tensor:
         out._backward = _backward
         return out
 
-    # ---- Gradient control ----
+    # gradient control 
 
     def detach(self):
         """Returns a copy with no graph connection (stop gradient)."""
@@ -434,8 +429,6 @@ class Tensor:
 
     def zero_grad(self):
         self.grad = None
-
-    # ---- Backward ----
 
     def backward(self):
         topo = []
@@ -453,8 +446,6 @@ class Tensor:
         for v in reversed(topo):
             v._backward()
 
-
-# ---- Free functions ----
 
 def cat(tensors, axis=0):
     data = np.concatenate([t.data for t in tensors], axis=axis)
@@ -476,7 +467,6 @@ def cat(tensors, axis=0):
 
 
 def one_hot(indices, num_classes):
-    """One-hot encode integer indices. No gradient (used for targets/sampling)."""
     flat = indices.flatten().astype(int)
     oh = np.zeros((flat.size, num_classes), dtype=np.float32)
     oh[np.arange(flat.size), flat] = 1.0

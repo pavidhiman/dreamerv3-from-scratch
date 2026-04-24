@@ -35,3 +35,18 @@ Optimizer step (nudge weights using gradients)
 ### File: nn/linear.py
 - A Linear layer does one thing: output = input @ weights + bias
 - Also needs its own weights and biases as trainable parameters and provide a way to collect them for the optimizer 
+
+### File: nn/gru_cell.py
+- Everything with the MLP so far has no memory 
+- GRU (Gated Recurrent Unit) is a layer that has a hidden state — a vector of numbers that it carries forward from one timestep to the next
+- This is the deterministic memory of the RSSM (h_t specifically)
+- GRU decides to remember by:
+    - Has 2 gates:
+        1. Reset gate (r) - if r = 0: ignore the past states completely, if r = 1 then use all of it
+        2. Update gate (z) - if z = 1, keep the old info unchanged (nothing new). If z = 0, throw out the old info and use entirely new content
+
+Entire concept of the GRU:
+1. r = sigmoid(input × W_r + old_h × U_r)        ← how much past to consider
+2. z = sigmoid(input × W_z + old_h × U_z)        ← how much to keep vs replace
+3. candidate = tanh(input × W_n + (r * old_h) × U_n)  ← proposed new content
+4. new_h = z * old_h + (1 - z) * candidate       ← blend old and new

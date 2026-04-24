@@ -9,3 +9,19 @@ class AdamW:
         self.t = 0 # counter for updates 
         self.m = [np.zeros_like(p.data) for p in self.parameters] # momentum vector - avg of most recent gradients
         self.v = [np.zeros_like(p.data) for p in self.parameters] # vector - avg of recent squared gradients
+    
+    def step(self): # step function 
+      self.t += 1
+      for i, p in enumerate(self.parameters):
+          if p.grad is None:
+              continue
+          self.m[i] = self.beta1 * self.m[i] + (1 - self.beta1) * p.grad
+          self.v[i] = self.beta2 * self.v[i] + (1 - self.beta2) * (p.grad ** 2)
+          m_hat = self.m[i] / (1 - self.beta1 ** self.t)
+          v_hat = self.v[i] / (1 - self.beta2 ** self.t)
+          p.data -= self.lr * self.weight_decay * p.data
+          p.data -= self.lr * m_hat / (np.sqrt(v_hat) + self.eps)
+   
+    def zero_grad(self): # resets gradients to zero
+      for p in self.parameters:
+          p.zero_grad()

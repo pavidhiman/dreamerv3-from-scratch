@@ -456,6 +456,8 @@ def cat(tensors, axis=0):
     )
 
     def _backward():
+        if out.grad is None:
+            return
         sections = np.cumsum([t.shape[axis] for t in tensors[:-1]])
         grads = np.split(out.grad, sections, axis=axis)
         for t, g in zip(tensors, grads):

@@ -57,3 +57,42 @@ Entire concept of the GRU:
     1. GRU (memory) must carry these numbers forward so smaller = faster = easier to learn
     2. Forces the network to identify what actually matters
 Overall flow: raw sensors (300) → [ENCODER] → compressed (200) → [RSSM] → internal state → [DECODER] → reconstructed sensors (300)
+
+### File; model/rssm.py (KEY part of how this runs)
+- To predict the future state based on the robots current state and current action, theres 2 challenges:
+    1. Memory - GRU handles this by knowing the current state and all previous states. 
+        => hidden state 'h'
+    2. Uncertainty - even with perfect memory, you can't perfectly predcit the next step since a joint might have friction, foot might slip, etc. 
+        - By predicting only 1 future, it'll learn an average which is useless
+        - Solution: predict a distribution (ex, 60% chance of this, 30% of this, etc) and then sample from this 
+        => stochastic latent 'z'
+
+**How 'z' works**
+- z is represented as 32 categorical variables with 32 classes (like rolling 32 dice each with 32 faces)
+    - At each timestep, model rolls all 32 dice and the combination of results represents one specific possibility of whats happening
+- z is a tensor of shape (batch, 32, 32) — 32 dice, each with 32 probabilities. We flatten it to (batch, 1024) when feeding it into other layers
+
+
+**2 paths for producing z**
+1. Posterior (used during training) - by checking the real sensor readings, you can extrapolate what z should be 
+    Input: h (memory) + encoded observation (real data)
+    Output: z (accurate)
+
+2. Prior (used during imagination) - using memory, guesses what z should be 
+    Input: h (memory) only
+    Output: z (best guess)
+
+Point of the training is to make priors guess match the posterior's accurate answer 
+- KL divergence loss will measrure how different they are and pushes them together 
+- Eventually, once the prior is good enough, model can imagine the future without real data 
+
+Flow of the RSSM:
+1. Take previous h, previous z, previous action
+2. Concatenate them: [z, action] → feed into GRU along with h
+3. GRU outputs new h (updated memory)
+4. Prior: MLP takes h → predicts z probabilities (the guess)
+5. Posterior: MLP takes [h, encoded_obs] → predicts z probabilities (the answer)
+6. During training: use posterior's z (the accurate one)
+   During imagination: use prior's z (the guess)
+7. Sample z from the probabilities (roll the dice)
+8. Full state = [h, z] — this is what decoders/reward predictors look at

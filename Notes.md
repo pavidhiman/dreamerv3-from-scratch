@@ -50,3 +50,10 @@ Entire concept of the GRU:
 2. z = sigmoid(input × W_z + old_h × U_z)        ← how much to keep vs replace
 3. candidate = tanh(input × W_n + (r * old_h) × U_n)  ← proposed new content
 4. new_h = z * old_h + (1 - z) * candidate       ← blend old and new
+
+### File: model/encoder.py
+- World models need encoders since if a robot has ~300 sensor readings - theres overlap between some of these (ex, left knee is at 30 degrees and the left thigh is at 45 degrees, you could probably guess the left ankle position pretty well)
+- Encoder compresses these 300 numbers into maybe 200 (keeping important stuff) for 2 reasons:
+    1. GRU (memory) must carry these numbers forward so smaller = faster = easier to learn
+    2. Forces the network to identify what actually matters
+Overall flow: raw sensors (300) → [ENCODER] → compressed (200) → [RSSM] → internal state → [DECODER] → reconstructed sensors (300)

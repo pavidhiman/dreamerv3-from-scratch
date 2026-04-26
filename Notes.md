@@ -100,3 +100,7 @@ Flow of the RSSM:
 ### File: model/decoder.py
 - Takes internal state and tries to reconstruct the original sensor readings - if the decoder accurately reconstructs reality from the internal state, it proves there's useful information there
 - Prevents RSSM to learn useless internal states 
+
+### File: model/reward_model.py
+- Takes the internal state and predicts "how much reward will the robot get in this state?"
+     - During imagination, this is how the robot knows if an imagined future is good or bad 

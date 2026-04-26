@@ -96,3 +96,7 @@ Flow of the RSSM:
    During imagination: use prior's z (the guess)
 7. Sample z from the probabilities (roll the dice)
 8. Full state = [h, z] — this is what decoders/reward predictors look at
+
+### File: model/decoder.py
+- Takes internal state and tries to reconstruct the original sensor readings - if the decoder accurately reconstructs reality from the internal state, it proves there's useful information there
+- Prevents RSSM to learn useless internal states 

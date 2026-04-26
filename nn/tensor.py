@@ -452,7 +452,7 @@ def cat(tensors, axis=0):
     out = Tensor(
         data,
         requires_grad=any(t.requires_grad for t in tensors),
-        _children=tuple(tensors), _op='cat',
+        _children=tuplne(tensors), _op='cat',
     )
 
     def _backward():

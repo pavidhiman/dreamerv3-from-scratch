@@ -34,3 +34,20 @@ class RSSM:
         else: # otherwise use prior
             post_logits = None
             logits = prior_logits
+        probs = logits.softmax(axis=-1) # raw -> probabilities which sum to 1 
+        indices = np.array([
+            [np.random.choice(self.stoch_classes, p=probs.data[b, d])
+             for d in range(self.stoch_size)]
+            for b in range(probs.shape[0])
+        ])
+        hard = one_hot(indices, self.stoch_classes)
+        z = probs.straight_through(hard)
+        z_flat = z.reshape(-1, self.stoch_size * self.stoch_classes)
+        return h, z_flat, prior_logits, post_logits
+
+    def parameters(self):
+        params = self.pre_gru.parameters()
+        params.extend(self.gru.parameters())
+        params.extend(self.prior.parameters())
+        params.extend(self.posterior.parameters())
+        return params

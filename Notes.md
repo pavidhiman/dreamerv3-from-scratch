@@ -104,3 +104,7 @@ Flow of the RSSM:
 ### File: model/reward_model.py
 - Takes the internal state and predicts "how much reward will the robot get in this state?"
      - During imagination, this is how the robot knows if an imagined future is good or bad 
+
+### File: model/continue.py
+- Takes the internal state and predicts "is the episode still going, or did the robot fall over?"
+    - Output is a probability between 0 (episode over) and 1 (still going) 

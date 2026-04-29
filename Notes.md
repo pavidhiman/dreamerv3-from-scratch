@@ -108,3 +108,19 @@ Flow of the RSSM:
 ### File: model/continue.py
 - Takes the internal state and predicts "is the episode still going, or did the robot fall over?"
     - Output is a probability between 0 (episode over) and 1 (still going) 
+
+### File: model/world_model.py
+- Currently have 5 separate pieces: encoder, decoder, RSSM, reward model, continue model 
+- To train the world model we must pass data through them in the right order, compute all losses and collect all params for the optimizer - this file allows us to call world_model.train_step(data) and computes the whole pipeline
+
+**During 1 training step:**
+For each timestep in the sequence:
+  1. Encode the observation          (encoder)
+  2. Run the RSSM forward            (RSSM: GRU + posterior + sample z)
+  3. Decode the state back            (decoder → reconstruction loss)
+  4. Predict the reward               (reward model → reward loss)
+  5. Predict continue                 (continue model → continue loss)
+
+Then also:
+  6. KL loss between prior and posterior (forces the prior to learn to guess well)
+  The total loss is: reconstruction + reward + continue + KL

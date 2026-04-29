@@ -139,3 +139,10 @@ Then also:
 5. Actor adjusts to pick actions that lead to higher-scored states
 6. Critic adjusts to score more accurately
 The actor is trying to maximize the critic's score
+
+### File: training/train.py
+- Has 2 alernating phases:
+    1. Collect real data: Run the robot in the simulator using the current actor. Store the experience in the replay buffer
+    2. Train
+        a. Sample sequences from the replay buffer. Train the world model (encoder, RSSM, decoder, reward, continue) on real data
+        b. Train the actor and critic in imagination. Start from real states, imagine forward 15 steps using the world model, use the critic to score imagined states, adjust the actor to reach higher-scored states

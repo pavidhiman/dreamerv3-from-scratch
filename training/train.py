@@ -10,16 +10,28 @@ from agent.actor import Actor
 from agent.critic import Critic
 from training.replay_buffer import ReplayBuffer
 
-def collect_data(env, buffer, num_steps=1000):
+def collect_data(env, buffer, world_model=None, actor=None, num_steps=1000):
     obs, _ = env.reset()
+    h, z = None, None
     for _ in range(num_steps):
-        action = env.action_space.sample()
-        next_obs, reward, terminated, truncated, _ = env.step(action)
+        if actor is not None and world_model is not None:
+            obs_tensor = Tensor(obs.reshape(1, -1).astype(np.float32))
+            encoded = world_model.encoder(obs_tensor)
+            prev_act = Tensor(np.zeros((1, env.action_space.shape[0]), dtype=np.float32))
+            h, z, _, _ = world_model.rssm.forward(h, z, prev_act, encoded_obs=encoded)
+            action = actor(h.detach(), z.detach())
+            act_np = np.clip(action.data[0], -1, 1) * 2.0
+            noise = np.random.randn(*act_np.shape).astype(np.float32) * 0.3
+            act_np = np.clip(act_np + noise, -2, 2)
+        else:
+            act_np = env.action_space.sample()
+        next_obs, reward, terminated, truncated, _ = env.step(act_np)
         done = terminated or truncated
-        buffer.add(obs, action, reward, done)
+        buffer.add(obs, act_np, reward, done)
         obs = next_obs
         if done:
             obs, _ = env.reset()
+            h, z = None, None
 
 def train_world_model(world_model, optimizer, buffer, batch_size=16, seq_len=16):
     batch = buffer.sample(batch_size, seq_len)
@@ -125,23 +137,35 @@ if __name__ == '__main__':
     critic_opt = AdamW(critic.parameters(), lr=3e-4)
     buffer = ReplayBuffer()
 
-    print('Collecting initial data...')
+    print('Collecting initial random data...')
     collect_data(env, buffer, num_steps=1000)
     print(f'Buffer size: {len(buffer)}')
 
     random_reward = evaluate(env, world_model, actor, num_episodes=3)
     print(f'Before training: avg reward = {random_reward:.1f}')
+    print()
 
-    for step in range(500):
-        wm_loss = train_world_model(world_model, wm_opt, buffer, batch_size=8, seq_len=8)
-        ac_result = train_actor_critic(
-            world_model, actor, critic, actor_opt, critic_opt,
-            buffer, horizon=8, batch_size=8,
-        )
-        if step % 100 == 0:
-            avg_reward = evaluate(env, world_model, actor, num_episodes=3)
-            print(f'step {step}: wm_loss={wm_loss:.4f}, eval_reward={avg_reward:.1f}')
+    num_epochs = 10
+    train_steps_per_epoch = 300
+    collect_steps_per_epoch = 200
+
+    for epoch in range(num_epochs):
+        wm_losses = []
+        for step in range(train_steps_per_epoch):
+            wm_loss = train_world_model(world_model, wm_opt, buffer, batch_size=8, seq_len=8)
+            if wm_loss is not None:
+                wm_losses.append(wm_loss)
+            train_actor_critic(
+                world_model, actor, critic, actor_opt, critic_opt,
+                buffer, horizon=8, batch_size=8,
+            )
+
+        avg_wm = sum(wm_losses) / len(wm_losses) if wm_losses else 0
+        avg_reward = evaluate(env, world_model, actor, num_episodes=3)
+        print(f'epoch {epoch}: wm_loss={avg_wm:.4f}, eval_reward={avg_reward:.1f}, buffer={len(buffer)}')
+
+        collect_data(env, buffer, world_model, actor, num_steps=collect_steps_per_epoch)
 
     final_reward = evaluate(env, world_model, actor, num_episodes=5)
-    print(f'After training: avg reward = {final_reward:.1f}')
+    print(f'\nFinal avg reward = {final_reward:.1f}')
     print('Training complete.')

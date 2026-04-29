@@ -124,3 +124,18 @@ For each timestep in the sequence:
 Then also:
   6. KL loss between prior and posterior (forces the prior to learn to guess well)
   The total loss is: reconstruction + reward + continue + KL
+
+### Files: agent/actor.py and agent/critic.py
+- This is for the RL agent that learns to walk inside the world models imagination 
+- Actor - looks at the current state and picks an action.
+    - Outputs a mean and st. dev for each action and then samples from this distribution 
+- Critic - looks at the current state and estimates "how much total future reward will I get from here?" It's like a score predictor
+
+**How they train together in imagination:** 
+1. Start from a real state the world model has seen
+2. Actor picks an action
+3. World model imagines what happens next (using prior, no real data)
+4. Critic scores each imagined state
+5. Actor adjusts to pick actions that lead to higher-scored states
+6. Critic adjusts to score more accurately
+The actor is trying to maximize the critic's score

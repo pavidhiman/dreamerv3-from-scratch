@@ -47,12 +47,8 @@ class WorldModel:
         post_probs = post.softmax(axis=-1)
         kl = (post_probs * (post_probs.log() - prior_probs.log())).sum(axis=-1).mean()
         kl_loss = kl.clamp(min_val=1.0)
-        prior = cat(all_prior_logits, axis=0)
-        post = cat(all_post_logits, axis=0)
-        prior_probs = prior.softmax(axis=-1)
-        post_probs = post.softmax(axis=-1)
-        kl = (post_probs * (post_probs.log() - prior_probs.log())).sum(axis=-1).mean()
-        kl_loss = kl.clamp(min_val=1.0)
+        loss = recon_loss + reward_loss + continue_loss + kl_loss
+        return loss
     def parameters(self):
         params = self.encoder.parameters()
         params.extend(self.rssm.parameters())

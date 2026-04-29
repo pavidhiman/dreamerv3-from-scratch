@@ -83,6 +83,32 @@ def train_actor_critic(world_model, actor, critic, actor_opt, critic_opt,
     return float(actor_loss.data), float(critic_loss.data)
 
 
+def evaluate(env, world_model, actor, num_episodes=5):
+    total_rewards = []
+    for ep in range(num_episodes):
+        obs, _ = env.reset()
+        h, z = None, None
+        episode_reward = 0
+        done = False
+        steps = 0
+        while not done and steps < 200:
+            obs_tensor = Tensor(obs.reshape(1, -1).astype(np.float32))
+            encoded = world_model.encoder(obs_tensor)
+            prev_action = Tensor(np.zeros((1, env.action_space.shape[0]), dtype=np.float32))
+            h, z, _, _ = world_model.rssm.forward(h, z, prev_action, encoded_obs=encoded)
+            h_det = h.detach()
+            z_det = z.detach()
+            action = actor(h_det, z_det)
+            act_np = np.clip(action.data[0], -1, 1) * 2.0
+            obs, reward, terminated, truncated, _ = env.step(act_np)
+            episode_reward += reward
+            done = terminated or truncated
+            steps += 1
+        total_rewards.append(episode_reward)
+    avg = sum(total_rewards) / len(total_rewards)
+    return avg
+
+
 if __name__ == '__main__':
     env = gym.make('Pendulum-v1')
     obs_size = env.observation_space.shape[0]
@@ -98,16 +124,24 @@ if __name__ == '__main__':
     actor_opt = AdamW(actor.parameters(), lr=3e-4)
     critic_opt = AdamW(critic.parameters(), lr=3e-4)
     buffer = ReplayBuffer()
+
     print('Collecting initial data...')
     collect_data(env, buffer, num_steps=1000)
     print(f'Buffer size: {len(buffer)}')
-    for step in range(200):
+
+    random_reward = evaluate(env, world_model, actor, num_episodes=3)
+    print(f'Before training: avg reward = {random_reward:.1f}')
+
+    for step in range(500):
         wm_loss = train_world_model(world_model, wm_opt, buffer, batch_size=8, seq_len=8)
         ac_result = train_actor_critic(
             world_model, actor, critic, actor_opt, critic_opt,
             buffer, horizon=8, batch_size=8,
         )
-        ac_loss = ac_result[0] if ac_result else None
-        if step % 20 == 0:
-            print(f'step {step}: wm_loss={wm_loss:.4f}, actor_loss={ac_loss}')
+        if step % 100 == 0:
+            avg_reward = evaluate(env, world_model, actor, num_episodes=3)
+            print(f'step {step}: wm_loss={wm_loss:.4f}, eval_reward={avg_reward:.1f}')
+
+    final_reward = evaluate(env, world_model, actor, num_episodes=5)
+    print(f'After training: avg reward = {final_reward:.1f}')
     print('Training complete.')

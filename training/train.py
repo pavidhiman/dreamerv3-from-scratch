@@ -125,47 +125,50 @@ if __name__ == '__main__':
     env = gym.make('Pendulum-v1')
     obs_size = env.observation_space.shape[0]
     action_size = env.action_space.shape[0]
-    hidden_size = 64
-    stoch_size = 8
-    stoch_classes = 8
+
+    hidden_size = 128
+    stoch_size = 16
+    stoch_classes = 16
     state_size = hidden_size + stoch_size * stoch_classes
+
     world_model = WorldModel(obs_size, action_size, hidden_size, stoch_size, stoch_classes)
-    actor = Actor(state_size, action_size, hidden_size=64)
-    critic = Critic(state_size, hidden_size=64)
-    wm_opt = AdamW(world_model.parameters(), lr=3e-4)
-    actor_opt = AdamW(actor.parameters(), lr=3e-4)
-    critic_opt = AdamW(critic.parameters(), lr=3e-4)
-    buffer = ReplayBuffer()
+    actor = Actor(state_size, action_size, hidden_size=128)
+    critic = Critic(state_size, hidden_size=128)
+
+    wm_opt = AdamW(world_model.parameters(), lr=3e-4, grad_clip=100.0)
+    actor_opt = AdamW(actor.parameters(), lr=1e-4, grad_clip=100.0)
+    critic_opt = AdamW(critic.parameters(), lr=1e-4, grad_clip=100.0)
+    buffer = ReplayBuffer(capacity=50000)
 
     print('Collecting initial random data...')
-    collect_data(env, buffer, num_steps=1000)
+    collect_data(env, buffer, num_steps=2000)
     print(f'Buffer size: {len(buffer)}')
 
-    random_reward = evaluate(env, world_model, actor, num_episodes=3)
+    random_reward = evaluate(env, world_model, actor, num_episodes=5)
     print(f'Before training: avg reward = {random_reward:.1f}')
     print()
 
-    num_epochs = 10
-    train_steps_per_epoch = 300
-    collect_steps_per_epoch = 200
+    num_epochs = 20
+    train_steps_per_epoch = 500
+    collect_steps_per_epoch = 300
 
     for epoch in range(num_epochs):
         wm_losses = []
         for step in range(train_steps_per_epoch):
-            wm_loss = train_world_model(world_model, wm_opt, buffer, batch_size=8, seq_len=8)
+            wm_loss = train_world_model(world_model, wm_opt, buffer, batch_size=16, seq_len=16)
             if wm_loss is not None:
                 wm_losses.append(wm_loss)
             train_actor_critic(
                 world_model, actor, critic, actor_opt, critic_opt,
-                buffer, horizon=8, batch_size=8,
+                buffer, horizon=15, batch_size=16,
             )
 
         avg_wm = sum(wm_losses) / len(wm_losses) if wm_losses else 0
-        avg_reward = evaluate(env, world_model, actor, num_episodes=3)
-        print(f'epoch {epoch}: wm_loss={avg_wm:.4f}, eval_reward={avg_reward:.1f}, buffer={len(buffer)}')
+        avg_reward = evaluate(env, world_model, actor, num_episodes=5)
+        print(f'epoch {epoch:2d}: wm_loss={avg_wm:.4f}, eval_reward={avg_reward:.1f}, buffer={len(buffer)}')
 
         collect_data(env, buffer, world_model, actor, num_steps=collect_steps_per_epoch)
 
-    final_reward = evaluate(env, world_model, actor, num_episodes=5)
+    final_reward = evaluate(env, world_model, actor, num_episodes=10)
     print(f'\nFinal avg reward = {final_reward:.1f}')
     print('Training complete.')

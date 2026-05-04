@@ -150,3 +150,13 @@ The actor is trying to maximize the critic's score
 ## CUDA Kernels
 - Currently, all the operations we're doing like matrix multiplying, etc - NumPy computes these on the CPU (1 core, goes through math sequentially)
 - CUDA kernel does the same math on a GPU (thousands of cores working at once)
+
+### File: cuda/bindings.py
+The full flow:
+Python: cuda_matmul(a, b)
+  → ctypes passes NumPy memory pointers to C
+    → C function copies data to GPU (cudaMemcpy)
+      → GPU launches thousands of threads (matmul_kernel)
+      → Each thread computes one output element
+    → C function copies result back to CPU (cudaMemcpy)
+  → Python gets a NumPy array back

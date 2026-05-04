@@ -146,3 +146,7 @@ The actor is trying to maximize the critic's score
     2. Train
         a. Sample sequences from the replay buffer. Train the world model (encoder, RSSM, decoder, reward, continue) on real data
         b. Train the actor and critic in imagination. Start from real states, imagine forward 15 steps using the world model, use the critic to score imagined states, adjust the actor to reach higher-scored states
+
+## CUDA Kernels
+- Currently, all the operations we're doing like matrix multiplying, etc - NumPy computes these on the CPU (1 core, goes through math sequentially)
+- CUDA kernel does the same math on a GPU (thousands of cores working at once)

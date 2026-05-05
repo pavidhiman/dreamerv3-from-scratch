@@ -1,8 +1,6 @@
 #include <cuda_runtime.h>
 #include <math.h>
 
-#define TILE 16
-
 __device__ float sigmoid(float x) {
     return 1.0f / (1.0f + expf(-x));
 }
@@ -15,40 +13,49 @@ __global__ void gru_forward_kernel(
     float *h_out,
     int batch, int input_size, int hidden_size
 ) {
-    int b = blockIdx.x;
+    extern __shared__ float shared[];
+    float *s_r = shared;
+
+    int b_idx = blockIdx.x;
     int j = threadIdx.x;
 
-    if (b >= batch || j >= hidden_size) return;
+    if (b_idx >= batch || j >= hidden_size) return;
 
     int combined_size = input_size + hidden_size;
 
-    float r_val = b_r[j]; // reset gate 
-    for (int k = 0; k < combined_size; k++) {
-        float inp = (k < input_size) ? x[b * input_size + k] : h_prev[b * hidden_size + (k - input_size)];
-        r_val += inp * W_r[k * hidden_size + j];
+    float r_val = b_r[j];
+    for (int k = 0; k < input_size; k++) {
+        r_val += x[b_idx * input_size + k] * W_r[k * hidden_size + j];
+    }
+    for (int k = 0; k < hidden_size; k++) {
+        r_val += h_prev[b_idx * hidden_size + k] * W_r[(input_size + k) * hidden_size + j];
     }
     r_val = sigmoid(r_val);
 
-    float z_val = b_z[j]; // update gate 
-    for (int k = 0; k < combined_size; k++) {
-        float inp = (k < input_size) ? x[b * input_size + k] : h_prev[b * hidden_size + (k - input_size)];
-        z_val += inp * W_z[k * hidden_size + j];
+    s_r[j] = r_val;
+    __syncthreads();
+
+    float z_val = b_z[j];
+    for (int k = 0; k < input_size; k++) {
+        z_val += x[b_idx * input_size + k] * W_z[k * hidden_size + j];
+    }
+    for (int k = 0; k < hidden_size; k++) {
+        z_val += h_prev[b_idx * hidden_size + k] * W_z[(input_size + k) * hidden_size + j];
     }
     z_val = sigmoid(z_val);
 
-    float c_val = b_c[j]; // candidate gate 
-    for (int k = 0; k < combined_size; k++) {
-        float inp;
-        if (k < input_size)
-            inp = x[b * input_size + k];
-        else
-            inp = r_val * h_prev[b * hidden_size + (k - input_size)];
-        c_val += inp * W_c[k * hidden_size + j];
+    float c_val = b_c[j];
+    for (int k = 0; k < input_size; k++) {
+        c_val += x[b_idx * input_size + k] * W_c[k * hidden_size + j];
+    }
+    for (int k = 0; k < hidden_size; k++) {
+        float rh = s_r[k] * h_prev[b_idx * hidden_size + k];
+        c_val += rh * W_c[(input_size + k) * hidden_size + j];
     }
     c_val = tanhf(c_val);
 
-    h_out[b * hidden_size + j] = z_val * h_prev[b * hidden_size + j] + (1.0f - z_val) * c_val; // final hidden state
-    // z=1 => keep old h, z=0 => use candidate
+    float h_j = h_prev[b_idx * hidden_size + j];
+    h_out[b_idx * hidden_size + j] = z_val * h_j + (1.0f - z_val) * c_val;
 }
 
 extern "C" {
@@ -92,8 +99,9 @@ void cuda_gru_forward(
 
     dim3 blocks(batch);
     dim3 threads(hidden_size);
+    size_t shared_mem = hidden_size * sizeof(float);
 
-    gru_forward_kernel<<<blocks, threads>>>(
+    gru_forward_kernel<<<blocks, threads, shared_mem>>>(
         d_x, d_h_prev,
         d_W_r, d_b_r,
         d_W_z, d_b_z,

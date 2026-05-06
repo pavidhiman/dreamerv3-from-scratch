@@ -1,4 +1,5 @@
 import numpy as np
+from cuda.backend import matmul as _backend_matmul
 
 
 def _unbroadcast(grad, shape):
@@ -138,7 +139,7 @@ class Tensor:
     def matmul(self, other):
         other = other if isinstance(other, Tensor) else Tensor(other)
         out = Tensor(
-            self.data @ other.data,
+            _backend_matmul(self.data, other.data),
             requires_grad=self.requires_grad or other.requires_grad,
             _children=(self, other), _op='matmul',
         )

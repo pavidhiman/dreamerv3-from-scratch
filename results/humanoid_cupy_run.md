@@ -25,9 +25,9 @@
 
 ## Key Results
 - **Random baseline: ~193**
-- **Best reward: 1050+** — humanoid walking forward with sustained locomotion
+- **Best reward: 1049.9** — humanoid walking forward with sustained locomotion
 - 8 rollbacks triggered and recovered each time
-- Successive peaks: 208 → 318 → 392 → 443 → 650 → 850 → **1050+**
+- Successive peaks: 208 → 318 → 392 → 443 → 650 → 850 → **1049.9**
 - Total training time: ~14,400s (~4 hours)
 
 ## Training Log — Quick Test (25 epochs)
@@ -64,7 +64,7 @@
 | **99** | **1.3961** | **499.9** | **499.9** | **Best — humanoid walking** |
 
 ## Analysis
-- **The humanoid walks.** 1050+ reward with velocity shaping confirms sustained forward locomotion.
+- **The humanoid walks.** 1049.9 reward with velocity shaping confirms sustained forward locomotion.
 - Rollback mechanism is critical — without it, the policy collapses permanently (proven in previous run).
 - Pattern: policy improves → overshoots → collapses → rollback → recovers to higher peak. Each cycle reaches a new best.
 - WM loss decreases steadily (3.35 → 1.39) independent of actor training.
@@ -76,7 +76,7 @@
 
 **Implementation**: `StructuredEncoder` with separate MLPs for torso (17→64), legs (8→64, weight-shared), arms (6→32, weight-shared), global features (331→128), fused through a final MLP (384→512).
 
-**Result**: Flat encoder reached 1050+ reward. Structured encoder plateaued at ~186 — worse than the random baseline of 193.
+**Result**: Flat encoder reached 1049.9 reward. Structured encoder plateaued at ~186 — worse than the random baseline of 193.
 
 **Why it failed**: Cross-body correlations matter early in locomotion learning. When the right foot contacts the ground, the relevant signal for the left leg's next action is immediate — the flat encoder sees this in its first layer, while the structured encoder can't mix across body parts until the final fusion layer. The body's bilateral symmetry might be useful information, but not at the cost of delaying cross-limb interaction by multiple layers.
 

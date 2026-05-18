@@ -71,3 +71,17 @@
 - WM loss decreases steadily (3.35 → 1.39) independent of actor training.
 - Actor instability root cause: dynamics backprop with 15-step horizon creates long gradient paths that occasionally produce very large updates. Conservative actor ratio (1:15) + rollback keeps this in check.
 - The "final avg reward" (276.2) is lower than best (499.9) because evaluation variance is high with only 5 episodes — some episodes the humanoid walks far, others it stumbles early.
+
+## Structured Encoder Experiment (Negative Result)
+
+**Hypothesis**: Grouping observations by body part and sharing weights between symmetric limbs (left/right leg, left/right arm) would improve sample efficiency by encoding structural inductive bias.
+
+**Implementation**: `StructuredEncoder` with separate MLPs for torso (17→64), legs (8→64, weight-shared), arms (6→32, weight-shared), global features (331→128), fused through a final MLP (384→512).
+
+**Result**: Flat encoder reached 499.9 reward. Structured encoder plateaued at ~186 — worse than the random baseline of 193.
+
+**Why it failed**: Cross-body correlations matter early in locomotion learning. When the right foot contacts the ground, the relevant signal for the left leg's next action is immediate — the flat encoder sees this in its first layer, while the structured encoder can't mix across body parts until the final fusion layer. The body's bilateral symmetry might be useful information, but not at the cost of delaying cross-limb interaction by multiple layers.
+
+## Fused CUDA GRU Kernel
+
+Custom CuPy `RawKernel` that fuses all GRU gate computations (reset, update, candidate) and the final hidden state update into a single GPU kernel launch. Activated during inference via `INFERENCE_MODE` flag — eliminates multiple intermediate allocations and kernel launches that the training path requires for autograd tracking.
